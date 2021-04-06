@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8">
+
+        <style>
+            @import url('https://fonts.googleapis.com/css?family=Source+Sans+Pro:400,700');
+
+            body {
+                padding: 2%;
+                font-family:'Source Sans Pro', sans-serif;
+                margin:0;
+            }
+            
+            .tooltip {
+                position: relative;
+                display: inline-block;
+            }
+
+            .tooltip .tooltiptext {
+                visibility: hidden;
+                width: 240px;
+                background-color: black;
+                color: #fff;
+                text-align: center;
+                border-radius: 6px;
+                padding: 5px 0;
+
+                /* Position the tooltip */
+                position: absolute;
+                z-index: 1;
+            }
+
+            .tooltip:hover .tooltiptext {
+                visibility: visible;
+            }
+            
+        </style>
+    </head>
+    <body onload="loadSettings('selectColor', 'net', 'threshold', 'lightOn', 'lightOff', 'nvOn', 'nvOff')">
+    
+        <h1>Status</h1>
+        <div>
+
+        </div>
+        <img src="https://i.postimg.cc/sQqsXnZQ/light-on.png" id="lightOn" alt="Lightning On"  width="0" height="0">
+        <img src="https://i.postimg.cc/BPFs1xxh/light-off.png" id="lightOff" alt="Lightning Off" width="128" height="128">
+        <img src="https://i.postimg.cc/5HPxc94m/nv-on.png" id="nvOn" alt="Jetson On"  width="0" height="0">
+        <img src="https://i.postimg.cc/TLpTT8hv/nv-off.png" id="nvOff" alt="Jetson Off" width="128" height="128">
+        
+        <p id = "response"> </p>
+
+        <h1>Modyfikacja oświetlenia</h1>
+        <div>
+            <label for="selectColor">Wybierz kolor:</label>
+            <input type="color" id="selectColor" value="#FFFFFF">
+        </div>
+        <br>
+        <div>
+            <label for="mode">Tryb:</label>
+            <select id="mode" name="mode">
+                <option value="stat">Statyczny</option>
+                <option value="dyna">Dynamiczny</option>
+                <option value="wave">Fala</option>
+            </select>
+        </div>
+            <br><br>
+            <input type="button" id="sendLight" value="Zatwierdź" onclick="changeLight('selectColor', 'mode', 'response');" />
+
+            
+        <h1>Kalibracja wykrywania</h1>
+
+        <div>
+            <div class="tooltip">
+                <label for="net">Model sieci neuronowej:</label>
+                <span class="tooltiptext">Model sieci ma wpływ na dokładność detekcji oraz czas potrzebny na przetworzenie klatki.</span>
+            </div>
+            <br>
+            <select id="net" name="net">
+                <option value="mob1">SSD-Mobilenet-v1</option>
+                <option value="mob2">SSD-Mobilenet-v2</option>
+                <option value="ince">SSD-Inception-v2</option>
+            </select>
+        </div>
+        <br>
+        <div>
+            <div class="tooltip">
+                <label for="threshold">Granica wykrywania:</label>
+                <span class="tooltiptext">Wartość ta wpływa na filtrowanie detekcji o niskiej pewności. Im mniejsza granica tym więcej niepewnych detekcji zostanie wychwycone.</span>
+            </div>
+            <br>
+            <input type="range" min="20" max="80" value="50" class="slider" id="threshold"> <span id="threshold_value"></span>
+            <br><br>
+            <input type="button" id="sendCalibration" value="Zatwierdź" onclick="changeCalibration('net', 'threshold', 'response');" />
+        </div>
+        
+        <footer>
+            <br>
+            <br>
+            <br>
+            2021 Jeremi Kot Politechnika Śląska
+        </footer>
+        <script type="text/javascript">
+
+            var slider = document.getElementById("threshold");
+            var slider_output = document.getElementById("threshold_value");
+            slider_output.innerHTML = slider.value + " %";
+
+            setInterval(function(){ 
+                    reloadStatus("nvOn", "nvOff", "lightOn", "lightOff");
+                }, 1000);
+
+            slider.oninput = function() {
+                slider_output.innerHTML = this.value + " %";
+            }
+            
+            function changeLight(color, mode, response) {
+                var xhttp = new XMLHttpRequest();
+
+                xhttp.onreadystatechange = function() {
+                    if (this.readyState == 4 && this.status == 200) {
+                        document.getElementById(response).innerHTML = "Zaktualizowano kolor: " + this.responseText;
+                    } 
+                };
+                
+                var color = document.getElementById(color).value;
+                var mode = document.getElementById(mode).value;
+                color = String(color).substring(1);
+                var query = "/submit_light?color=" + color + "&mode=" + mode;
+
+                
+                xhttp.open("GET", query, true);
+                xhttp.send();
+            }
+
+            function changeCalibration(dropDown, slider, output){
+                
+                var xhttp = new XMLHttpRequest();
+
+                xhttp.onreadystatechange = function() {
+                    if (this.readyState == 4 && this.status == 200) {
+                        console.log(this.response);
+                        if(this.response == "true"){
+                            document.getElementById(output).innerHTML = "Zaktualizowano ustawienia kalibracji. <span style = \"color:red\">Wymagany restart Jetsona</span>";
+                        } else {
+                            document.getElementById(output).innerHTML = "Ustawienia są już aktualne";
+                        }
+                    } 
+                };
+
+                var inputSlider = document.getElementById(slider).value;
+                var inputDropDown = document.getElementById(dropDown).value;
+
+                var query ="/submit_calibration?threshold=" + inputSlider + "&net=" + inputDropDown;
+                
+                console.log(query);
+
+                xhttp.open("GET", query, true);
+                xhttp.send();
+
+            }
+
+            function loadSettings(colorInput, netInput, thrInput, lightOn, lightOff, nvOn, nvOff){
+                loadColor(colorInput);
+                loadCalibration(netInput, thrInput);
+                statusNv(nvOn, nvOff);
+                statusLight(lightOn, lightOff);
+            }
+
+            function loadColor(colorInput) {
+                var xhttp = new XMLHttpRequest();
+
+                xhttp.onreadystatechange = function() {
+                    if (this.readyState == 4 && this.status == 200) {
+                        document.getElementById(colorInput).setAttribute("value", "#" + this.responseText);
+                    } 
+                };
+
+                xhttp.open("GET", "/color", true);
+                xhttp.send();
+            }
+
+            function loadCalibration(netInput, thrInput) {
+                var xhttp = new XMLHttpRequest();
+
+                xhttp.onreadystatechange = function() {
+                    if (this.readyState == 4 && this.status == 200) {
+                        var res = this.response;
+                        var net = res.substring(0, 4);
+                        console.log(net);
+                        var thr = res.substring(4);
+                        console.log(thr);
+                        document.getElementById(netInput).value = net;
+                        document.getElementById(thrInput).setAttribute("value", thr);
+                        slider_output.innerHTML = thr + " %"
+                    } 
+                };
+
+                xhttp.open("GET", "/calibration", true);
+                xhttp.send();
+
+            }
+
+            function statusLight(lightOn, lightOff) {
+
+                var xhttp = new XMLHttpRequest();
+
+                xhttp.onreadystatechange = function() {
+                    if (this.readyState == 4 && this.status == 200) {
+                        console.log(this.response);
+                        if(this.response == "1") {
+                            document.getElementById(lightOff).setAttribute("height", "0");
+                            document.getElementById(lightOff).setAttribute("width", "0");
+                            document.getElementById(lightOn).setAttribute("height", "128");
+                            document.getElementById(lightOn).setAttribute("width", "128");
+                        } else {
+                            document.getElementById(lightOn).setAttribute("height", "0");
+                            document.getElementById(lightOn).setAttribute("width", "0");
+                            document.getElementById(lightOff).setAttribute("height", "128");
+                            document.getElementById(lightOff).setAttribute("width", "128");
+                        }
+                    } 
+                };
+
+                xhttp.open("GET", "/light", true);
+                xhttp.send();
+
+            }
+
+            function statusNv(nvOn, nvOff) {
+                var xhttp = new XMLHttpRequest();
+
+                xhttp.onreadystatechange = function() {
+                    if (this.readyState == 4 && this.status == 200) {
+                        console.log(this.response);
+                        if(this.response == "1") {
+                            document.getElementById(nvOff).setAttribute("height", "0");
+                            document.getElementById(nvOff).setAttribute("width", "0");
+                            document.getElementById(nvOn).setAttribute("height", "128");
+                            document.getElementById(nvOn).setAttribute("width", "128");
+                        } else {
+                            document.getElementById(nvOn).setAttribute("height", "0");
+                            document.getElementById(nvOn).setAttribute("width", "0");
+                            document.getElementById(nvOff).setAttribute("height", "128");
+                            document.getElementById(nvOff).setAttribute("width", "128");
+                        }
+                    } 
+                };
+
+                xhttp.open("GET", "/nv", true);
+                xhttp.send();
+            }
+
+            function reloadStatus(nvOn, nvOff, lightOn, lightOff){
+                statusNv(nvOn, nvOff);
+                statusLight(lightOn, lightOff);
+            }
+
+        </script>
+
+    </body>
+</html>
